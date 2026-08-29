@@ -9,8 +9,10 @@ covered below:
 
 * ``auth_helpers.verify_token``  -- HTTPBearer based; used by protected.py and
   every endpoint in watchlist.py.
-* ``auth.get_current_user``      -- OAuth2PasswordBearer based; used by
-  cineverse.py.
+* ``auth.get_current_user``      -- OAuth2PasswordBearer based. Its only
+  consumer used to be cineverse.py, which has since been deleted as dead code,
+  so it currently backs no route; it stays as the supported
+  OAuth2PasswordBearer entry point and is kept covered here.
 
 No database, no network, no real .env (see conftest.py).
 """
