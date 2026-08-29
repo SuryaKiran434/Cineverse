@@ -1,0 +1,17 @@
+# Pinned to the versions from the virtualenv that was previously committed
+# to this repo, so behaviour is unchanged.
+#
+#   python3 -m venv venv
+#   source venv/bin/activate
+#   pip install -r requirements.txt
+
+fastapi==0.115.8
+uvicorn==0.34.0
+SQLAlchemy==2.0.38
+mysql-connector-python==9.2.0
+pydantic==2.10.6
+PyJWT==2.10.1
+passlib==1.7.4
+bcrypt==4.2.1
+python-dotenv==1.0.1
+requests==2.32.3
