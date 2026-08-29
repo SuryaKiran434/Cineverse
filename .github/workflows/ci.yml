@@ -1,0 +1,50 @@
+name: CI
+
+# Runs the test suite on every pull request, and on main after merge.
+# The suites are fully offline: they stub the `database` module in
+# sys.modules and fake the DB connection, so no MySQL service is needed.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    # This name becomes the status-check context. Keep it stable — it is what
+    # a branch protection rule would reference.
+    name: Tests (Python)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      # The pinned runtime dependencies are installed for real, so that a
+      # Dependabot bump of PyJWT / requests / python-dotenv is genuinely
+      # exercised by the tests rather than rubber-stamped. This is the whole
+      # point of the job — do not swap this for a slimmed-down install list.
+      - name: Install runtime dependencies
+        run: pip install -r requirements.txt
+
+      # pytest runs the suite; httpx is required by fastapi.testclient.TestClient,
+      # which tests/test_watchlist_authz.py uses. httpx is a *test-only* dependency
+      # and is deliberately not added to requirements.txt, which stays the pinned
+      # runtime set that Dependabot manages.
+      - name: Install test dependencies
+        run: pip install pytest httpx
+
+      - name: Run tests
+        run: python -m pytest -q
