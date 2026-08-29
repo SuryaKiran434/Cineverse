@@ -1,0 +1,23 @@
+# Virtualenv — 2,723 files were tracked here. Recreate with:
+#   python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+venv/
+.venv/
+env/
+
+# Secrets — never commit these
+.env
+.env.*
+!.env.example
+credentials.json
+token.json
+*.pem
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# macOS / IDE
+.DS_Store
+.idea/
+.vscode/
