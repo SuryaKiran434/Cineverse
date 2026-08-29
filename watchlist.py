@@ -3,9 +3,12 @@ from database import get_db_connection
 from auth_helpers import verify_token
 from pydantic import BaseModel
 from dotenv import load_dotenv
+import logging
 import os
 import requests
 import random
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -215,7 +218,12 @@ def get_recommendations(user_email: str = Depends(verify_token)):
         """, (user_id, user_id))
 
         user_movies = {row["movie_id"] for row in cursor.fetchall()}
-        print("User Movies:", user_movies)  # Debugging output
+        # Debug logging in this function deliberately records only counts and
+        # movie ids. The values that come back from TMDB are derived from a
+        # request URL carrying TMDB_API_KEY, so anything reached through a
+        # response body is treated as credential-tainted and stays out of the
+        # logs -- see the comment on the per-movie log line below.
+        logger.debug("Recommendation seed: %d movie(s) on the user's lists", len(user_movies))
 
         if not user_movies:
             return {"recommendations": []}  # No recommendations if user has no movies
@@ -224,12 +232,22 @@ def get_recommendations(user_email: str = Depends(verify_token)):
         user_genres = set()
         for movie_id in user_movies:
             movie_details = get_movie_details(movie_id)
-            print(f"Details for movie {movie_id}:", movie_details)  # Debugging output
+            # Log the movie id and how many genres came back, never the payload
+            # itself: `movie_details` is built from the body of a request made
+            # to a URL that embeds TMDB_API_KEY, and dumping it wholesale is
+            # what CodeQL flags as clear-text logging of sensitive data. The id
+            # is the useful debugging handle anyway -- it says which movie was
+            # resolved and whether it contributed any genres.
+            logger.debug(
+                "Resolved TMDB details for movie %s: %d genre(s)",
+                movie_id,
+                len(movie_details["genres"]),
+            )
 
             if movie_details["genres"]:  # Ensure genres are not empty
                 user_genres.update(movie_details["genres"])
 
-        print("User Genres:", user_genres)  # Debugging output
+        logger.debug("Derived %d distinct genre(s) from the user's movies", len(user_genres))
 
         if not user_genres:
             return {"recommendations": []}  # No recommendations if no genres found
@@ -269,7 +287,7 @@ def get_recommendations(user_email: str = Depends(verify_token)):
                     if len(recommended_movies) >= 10:  # Limit recommendations
                         break
 
-        print("Recommended Movies:", recommended_movies.values())  # Debugging output
+        logger.debug("Recommending %d movie(s)", len(recommended_movies))
 
         return {"recommendations": list(recommended_movies.values())}
 
