@@ -36,16 +36,27 @@ jobs:
       # Dependabot bump of PyJWT / requests / python-dotenv is genuinely
       # exercised by the tests rather than rubber-stamped. This is the whole
       # point of the job — do not swap this for a slimmed-down install list.
+      #
+      # `--only-binary :all:` makes pip refuse source distributions, so no
+      # package's setup.py executes on the runner. Verified against the
+      # runner's target (cp313/manylinux): every distribution pip resolves here
+      # has a wheel -- mysql-connector-python, pydantic-core, SQLAlchemy,
+      # bcrypt and greenlet included -- so this constrains what pip is allowed
+      # to do without changing what it installs. Quoted because a plain YAML
+      # scalar may not end in a colon.
       - name: Install runtime dependencies
-        run: pip install -r requirements.txt
+        run: "pip install -r requirements.txt --only-binary :all:"
 
       # pytest runs the suite; httpx is required by fastapi.testclient.TestClient,
       # which tests/test_watchlist_authz.py uses. httpx is a *test-only* dependency
       # and is deliberately not added to requirements.txt, which stays the pinned
       # runtime set that Dependabot manages.
       # pytest-cov is likewise test-only and stays out of requirements.txt.
+      # Pinned to the versions CI already resolved, so this locks the set rather
+      # than moving it. The cost: Dependabot reads manifests, not ad-hoc pip
+      # command lines, so these three are manual maintenance from here.
       - name: Install test dependencies
-        run: pip install pytest httpx pytest-cov
+        run: "pip install pytest==9.1.1 httpx==0.28.1 pytest-cov==7.1.0 --only-binary :all:"
 
       # The app is a flat set of top-level modules rather than a package, so
       # each one is named explicitly — `--cov=.` would drag in tests/ and venv/.
