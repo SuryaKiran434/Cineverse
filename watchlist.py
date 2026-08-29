@@ -14,8 +14,9 @@ class Movie(BaseModel):
     title: str
 
 class WatchlistRequest(BaseModel):
-    user_id: int
-    movie_id: int    
+    # NOTE: deliberately no `user_id` field. The owner of the watchlist is
+    # always derived from the verified JWT, never from the request body.
+    movie_id: int
 
 load_dotenv()
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
@@ -45,33 +46,38 @@ def get_user_id(db, user_email: str):
 
 # Add movie to watchlist
 @router.post("/watchlist/add")
-def add_to_watchlist(request: WatchlistRequest):
+def add_to_watchlist(request: WatchlistRequest, user_email: str = Depends(verify_token)):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Check if movie is already in watched list
-    cursor.execute("SELECT * FROM watched WHERE user_id = %s AND movie_id = %s", (request.user_id, request.movie_id))
-    if cursor.fetchone():
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection error")
+
+    try:
+        cursor = conn.cursor()
+        # The watchlist owner comes from the verified token, never the request body.
+        user_id = get_user_id(conn, user_email)
+
+        # Check if movie is already in watched list
+        cursor.execute("SELECT * FROM watched WHERE user_id = %s AND movie_id = %s", (user_id, request.movie_id))
+        if cursor.fetchone():
+            return {"error": "Movie is already in watched list"}
+
+        # Check if already in watchlist
+        cursor.execute("SELECT * FROM watchlist WHERE user_id = %s AND movie_id = %s", (user_id, request.movie_id))
+        if cursor.fetchone():
+            return {"error": "Movie is already in watchlist"}
+
+        # Fetch movie details from TMDB API
+        movie_details = get_movie_details(request.movie_id)
+
+        # Add to watchlist
+        cursor.execute("INSERT INTO watchlist (user_id, movie_id, title) VALUES (%s, %s, %s)",
+                       (user_id, request.movie_id, movie_details["title"]))
+        conn.commit()
+
+        return {"message": "Movie added to watchlist", "title": movie_details["title"]}
+
+    finally:
         conn.close()
-        return {"error": "Movie is already in watched list"}
-
-    # Check if already in watchlist
-    cursor.execute("SELECT * FROM watchlist WHERE user_id = %s AND movie_id = %s", (request.user_id, request.movie_id))
-    if cursor.fetchone():
-        conn.close()
-        return {"error": "Movie is already in watchlist"}
-
-    # Fetch movie details from TMDB API
-    movie_details = get_movie_details(request.movie_id)
-
-    # Add to watchlist
-    cursor.execute("INSERT INTO watchlist (user_id, movie_id, title) VALUES (%s, %s, %s)", 
-                   (request.user_id, request.movie_id, movie_details["title"]))
-    conn.commit()
-
-    conn.close()
-    
-    return {"message": "Movie added to watchlist", "title": movie_details["title"]}
 
 # Remove movie from watchlist
 @router.delete("/watchlist/remove/{movie_id}")
