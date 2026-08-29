@@ -84,7 +84,7 @@ Request flow, end to end:
 | File | Role |
 |---|---|
 | `main.py` | Builds the `FastAPI` app, installs CORS, mounts all four routers, exposes `/` and `/test-db` |
-| `auth.py` | `/register`, `/login`, bcrypt hashing, `get_current_user`, and a TMDB search route |
+| `auth.py` | `/register`, `/login`, bcrypt hashing, and the `get_current_user` dependency |
 | `auth_helpers.py` | `create_access_token()` / `verify_token()` — HS256, `HTTPBearer` scheme |
 | `database.py` | `get_db_connection()` — a raw `mysql.connector` connection built from `DB_*` env vars |
 | `watchlist.py` | Watchlist + watched CRUD and the personalised `/recommendations` endpoint |
@@ -92,7 +92,6 @@ Request flow, end to end:
 | `protected.py` | A single example route demonstrating the JWT dependency |
 | `countries.json` | ISO country code → display name, used to label streaming providers |
 | `config.py`, `models.py` | **Empty placeholder files** — see [Known rough edges](#known-rough-edges) |
-| `cineverse.py` | **Not wired into the app** — an older standalone `FastAPI()` instance, superseded by `main.py` |
 
 ---
 
@@ -147,15 +146,19 @@ collecting up to 10 movies the user has not already saved.
 |---|---|---|---|
 | `GET` | `/tmdb/movie/{movie_id}` | — | Trimmed movie detail: title, overview, runtime, genres, poster/backdrop URLs, votes, tagline, status, production companies, spoken languages |
 | `GET` | `/tmdb/genres` | — | The full TMDB movie genre list |
-| `GET` | `/tmdb/search?query=` | — | Search by title → `{id, title, release_date, poster_url, overview}` ² |
+| `GET` | `/tmdb/search?query=&page=` | — | Search by title → TMDB's raw `/search/movie` response, passed through unchanged ² |
 | `GET` | `/tmdb/movie/{movie_id}/providers` | — | Streaming / buy / rent providers, grouped by country name via `countries.json` |
 | `GET` | `/tmdb/movie/{movie_id}/recommendations` | — | TMDB's own "more like this" list for a movie |
 
-² `/tmdb/search` is declared **twice** — once in `auth.py` and once in
-`tmdb.py`. `auth.py`'s router is mounted first, so *that* one wins: it takes
-`query` and `page`, authenticates to TMDB with the bearer
-`TMDB_ACCESS_TOKEN`, and returns TMDB's raw response shape rather than the
-trimmed shape documented above.
+² This route used to be declared **twice** — once in `auth.py` and once in
+`tmdb.py` — with two different response shapes. `auth.py`'s router is mounted
+first, so FastAPI served that one and `tmdb.py`'s was unreachable. The two are
+now consolidated into a single declaration in `tmdb.py`, keeping the behaviour
+that was actually being served and that the client depends on: it
+authenticates to TMDB with the bearer `TMDB_ACCESS_TOKEN` and passes TMDB's
+raw response straight through, so `results[].poster_path` is a **relative**
+path. `cineverse-frontend` expands it into a full image URL itself.
+`page` is accepted and validated but is not currently forwarded to TMDB.
 
 ---
 
@@ -170,6 +173,9 @@ trimmed shape documented above.
   - `auth_helpers.verify_token` (`HTTPBearer`) returns the email as a string and
     is what the watchlist routes use;
   - `auth.get_current_user` (`OAuth2PasswordBearer`) returns `{"email": ...}`.
+    It has no route depending on it at the moment — its only consumer was
+    `cineverse.py`, which has been removed — but it stays as the supported
+    `OAuth2PasswordBearer` entry point and is covered by the test suite.
 - **Passwords:** hashed with **bcrypt** through `passlib`'s `CryptContext`. Only
   the hash is ever stored, and `/login` compares with `pwd_context.verify`.
 
@@ -231,13 +237,15 @@ route:
 | Credential | Used as | Where |
 |---|---|---|
 | `TMDB_API_KEY` | `?api_key=` query parameter | `tmdb.py`, `watchlist.py` |
-| `TMDB_ACCESS_TOKEN` | `Authorization: Bearer …` header | `auth.py`'s `/tmdb/search` |
+| `TMDB_ACCESS_TOKEN` | `Authorization: Bearer …` header | `tmdb.py`'s `/tmdb/search` |
 
 Endpoints consumed: `/search/movie`, `/movie/{id}`, `/movie/{id}/watch/providers`,
 `/movie/{id}/recommendations`, `/genre/movie/list`, `/discover/movie`.
 
 Poster and backdrop paths are expanded to full URLs
-(`https://image.tmdb.org/t/p/w500…`) before being returned.
+(`https://image.tmdb.org/t/p/w500…`) before being returned — with the
+exception of `/tmdb/search`, which passes TMDB's raw response through and so
+returns the relative `poster_path` for the client to expand.
 
 `countries.json` maps the ISO country codes TMDB returns in the providers
 response to human-readable country names.
@@ -375,12 +383,6 @@ Documented here so they are not mistaken for design:
   `os.getenv` in each module, and there are no ORM models — despite
   `SQLAlchemy` being pinned in `requirements.txt`, it is not currently imported
   anywhere.
-- **`cineverse.py` is dead code.** It defines a second `FastAPI()` instance that
-  `main.py` never mounts, and it calls `Security(...)` without importing it, so
-  it would fail at import time. `auth.py`'s `/tmdb/search` supersedes it.
-- **`/tmdb/search` is defined twice** (`auth.py` and `tmdb.py`). The `auth.py`
-  version wins because its router is mounted first, and it returns TMDB's raw
-  response rather than the trimmed shape `tmdb.py` builds.
 - **`/watchlist/add` trusts `user_id` from the request body** rather than
   deriving it from the JWT, unlike every other mutating route. Any caller can
   write to another user's watchlist.

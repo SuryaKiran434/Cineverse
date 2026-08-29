@@ -1,22 +1,17 @@
-from fastapi import APIRouter, HTTPException, Depends, Security
+from fastapi import APIRouter, HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer  # ✅ Import this!
 from pydantic import BaseModel
 from passlib.context import CryptContext
 import jwt
 import os
 from database import get_db_connection
-from auth_helpers import create_access_token, verify_token
-from fastapi import Query
-import requests
+from auth_helpers import create_access_token
 
 # ✅ Define OAuth2PasswordBearer before using it
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 SECRET_KEY = os.getenv("SECRET_KEY")  # Make sure this is set in your .env file
 ALGORITHM = "HS256"
-TMDB_API_KEY = os.getenv("TMDB_API_KEY")
-url = "https://api.themoviedb.org/3/search/movie"
-TMDB_ACCESS_TOKEN = os.getenv("TMDB_ACCESS_TOKEN")
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -102,20 +97,3 @@ def get_current_user(token: str = Security(oauth2_scheme)):  # ✅ Now it’s co
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
-
-@router.get("/tmdb/search")
-def search_movies(query: str = Query(..., min_length=1), page: int = Query(1, ge=1)):
-    if not TMDB_API_KEY:
-        raise HTTPException(status_code=500, detail="TMDB API key is missing")
-
-    headers = {
-    "Authorization": f"Bearer {TMDB_ACCESS_TOKEN}"
-}
-
-    params = {
-        "query": query,
-    
-    }
-    
-    response = requests.get(url, headers=headers, params=params)
-    return response.json()

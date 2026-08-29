@@ -1,15 +1,20 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 import requests
 import os
 from dotenv import load_dotenv
 import json
 
-# Load API key from .env
+# Load API credentials from .env
 load_dotenv()
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+TMDB_ACCESS_TOKEN = os.getenv("TMDB_ACCESS_TOKEN")
 
-if os.path.exists("countries.json"):
-    with open("countries.json", "r", encoding="utf-8") as file:
+# Resolved against this module's own directory rather than the process working
+# directory, so importing tmdb.py does not depend on where the app was started.
+_COUNTRIES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "countries.json")
+
+if os.path.exists(_COUNTRIES_PATH):
+    with open(_COUNTRIES_PATH, "r", encoding="utf-8") as file:
         COUNTRY_MAPPING = json.load(file)
 else:
     raise FileNotFoundError("The countries.json file is missing")
@@ -57,28 +62,33 @@ def get_movie_genres():
     data = response.json()
     return {"genres": data["genres"]}
 
-# Search movies by query
+# Search movies by query.
+#
+# This used to be declared twice -- here and again in auth.py -- with two
+# different response shapes. auth.py's router is mounted first in main.py, so
+# auth.py's version was the one FastAPI actually served and the version below
+# was dead code. The two are now consolidated into this single declaration,
+# and the behaviour kept is auth.py's, because that is what the client needs:
+# cineverse-frontend's src/pages/Search.jsx reads `response.data.results` and
+# then builds its own poster URL from `movie.poster_path`. TMDB's raw response
+# carries `poster_path`; the trimmed shape that used to live here exposed a
+# pre-expanded `poster_url` and no `poster_path` at all, so every poster would
+# have fallen back to /noimage.jpg had it ever been reachable.
 @router.get("/tmdb/search")
-def search_movies(query: str):
-    url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={query}"
-    response = requests.get(url)
+def search_movies(query: str = Query(..., min_length=1), page: int = Query(1, ge=1)):
+    if not TMDB_API_KEY:
+        raise HTTPException(status_code=500, detail="TMDB API key is missing")
 
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail="Search failed")
-
-    data = response.json()
-    return {
-        "results": [
-            {
-                "id": movie["id"],
-                "title": movie["title"],
-                "release_date": movie.get("release_date", "N/A"),
-                "poster_url": f"https://image.tmdb.org/t/p/w500{movie['poster_path']}" if movie.get("poster_path") else None,
-                "overview": movie["overview"]
-            }
-            for movie in data["results"]
-        ]
+    headers = {
+        "Authorization": f"Bearer {TMDB_ACCESS_TOKEN}"
     }
+
+    params = {
+        "query": query,
+    }
+
+    response = requests.get("https://api.themoviedb.org/3/search/movie", headers=headers, params=params)
+    return response.json()
 
 # Get streaming providers
 @router.get("/tmdb/movie/{movie_id}/providers")
