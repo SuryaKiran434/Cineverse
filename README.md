@@ -22,6 +22,7 @@ The React client that consumes this API lives in
 - [Data model](#data-model)
 - [TMDB integration](#tmdb-integration)
 - [Running locally](#running-locally)
+- [Testing](#testing)
 - [Security notes](#security-notes)
 - [Known rough edges](#known-rough-edges)
 
@@ -345,6 +346,30 @@ run the frontend on that port or add your origin to `allow_origins` in
 
 ---
 
+## Testing
+
+```bash
+pip install pytest pytest-cov httpx
+pytest
+```
+
+**62 tests across 5 files, all passing.** No database and no network: the MySQL
+connection and every TMDB call are stubbed, so the suite runs from a clean
+checkout with nothing provisioned.
+
+| File | Covers |
+|---|---|
+| `tests/test_auth_jwt.py` | Token creation and expiry, `alg: none` rejection, signature failures, and that PyJWT still raises the exception classes the code catches |
+| `tests/test_watchlist_authz.py` | That the watchlist written is always the one owned by the bearer of the token, never a `user_id` from the request body |
+| `tests/test_tmdb_routes.py` | The proxy routes, so the TMDB credentials stay server-side |
+| `tests/test_error_response_hygiene.py` | That error responses carry no upstream text, stack frames or connection details |
+| `tests/test_watchlist_logging.py` | That log records carry no personal data |
+
+CI (`.github/workflows/ci.yml`, job **Tests (Python)**) runs the same suite on
+Python 3.13 and publishes a coverage report.
+
+---
+
 ## Security notes
 
 ### TMDB keys are server-side credentials
@@ -383,10 +408,9 @@ Documented here so they are not mistaken for design:
   `os.getenv` in each module, and there are no ORM models — despite
   `SQLAlchemy` being pinned in `requirements.txt`, it is not currently imported
   anywhere.
-- **`/watchlist/add` trusts `user_id` from the request body** rather than
-  deriving it from the JWT, unlike every other mutating route. Any caller can
-  write to another user's watchlist.
 - **`auth_helpers.create_access_token` uses `datetime.utcnow()`**, which is
-  deprecated in Python 3.12 in favour of
-  `datetime.now(timezone.utc)`.
-- **No test suite and no CI workflow** in this repository yet.
+  deprecated in Python 3.12 in favour of `datetime.now(timezone.utc)`. The
+  behaviour is correct — the tests pin expiry and rejection — but the call will
+  eventually stop existing.
+- **Coverage is concentrated on auth, authorisation and response hygiene.** The
+  database access paths have no tests, because they would need a live MySQL.
