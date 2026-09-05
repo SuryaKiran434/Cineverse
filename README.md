@@ -84,7 +84,7 @@ Request flow, end to end:
 
 | File | Role |
 |---|---|
-| `main.py` | Builds the `FastAPI` app, installs CORS, mounts all four routers, exposes `/` and `/test-db` |
+| `main.py` | Builds the `FastAPI` app, installs CORS, mounts all four routers, exposes `/` and `/test-db`, and registers a global exception handler that turns any unhandled error into an opaque 500 |
 | `auth.py` | `/register`, `/login`, bcrypt hashing, and the `get_current_user` dependency |
 | `auth_helpers.py` | `create_access_token()` / `verify_token()` — HS256, `HTTPBearer` scheme |
 | `database.py` | `get_db_connection()` — a raw `mysql.connector` connection built from `DB_*` env vars |
@@ -125,7 +125,7 @@ Interactive docs: **http://127.0.0.1:8000/docs**.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/watchlist/add` | — ¹ | Body `{user_id, movie_id}`. Refuses if the movie is already watched or already listed. Resolves the title from TMDB. |
+| `POST` | `/watchlist/add` | Bearer | Body `{movie_id}`. Refuses if the movie is already watched or already listed. Resolves the title from TMDB. |
 | `DELETE` | `/watchlist/remove/{movie_id}` | Bearer | Removes a movie from the caller's watchlist |
 | `POST` | `/watched/add` | Bearer | Body `{movie_id, title}`. Moves the movie out of the watchlist if it was there. |
 | `DELETE` | `/watched/remove/{movie_id}` | Bearer | Removes a movie from the caller's watched list |
@@ -133,8 +133,10 @@ Interactive docs: **http://127.0.0.1:8000/docs**.
 | `GET` | `/watched` | Bearer | The caller's watched list, likewise enriched |
 | `GET` | `/recommendations` | Bearer | Personalised recommendations — see below |
 
-¹ `/watchlist/add` is the one mutating route that takes `user_id` from the
-request body instead of the JWT. See [Known rough edges](#known-rough-edges).
+Every route in this table derives the acting user from the bearer token.
+`/watchlist/add` used to take a `user_id` from the request body instead; that
+was fixed, and `WatchlistRequest` now carries `movie_id` only — a `user_id` sent
+by an old client is ignored. `tests/test_watchlist_authz.py` pins this.
 
 **How `/recommendations` works:** it unions the caller's `watched` and
 `watchlist` movie ids, asks TMDB for the genres of each, maps those genre names
@@ -366,7 +368,14 @@ checkout with nothing provisioned.
 | `tests/test_watchlist_logging.py` | That log records carry no personal data |
 
 CI (`.github/workflows/ci.yml`, job **Tests (Python)**) runs the same suite on
-Python 3.13 and publishes a coverage report.
+Python 3.13, publishes a coverage report and then runs an advisory SonarCloud
+scan.
+
+Two more workflows sit alongside it: `slack-notify.yml` posts a push
+notification, and `dependabot-auto-merge.yml` queues Dependabot's grouped
+patch/minor pull requests to merge once the required checks go green — majors
+are excluded and wait for a human. `.github/dependabot.yml` collapses each
+ecosystem (`pip`, `github-actions`) into one grouped pull request per week.
 
 ---
 
