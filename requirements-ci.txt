@@ -1,0 +1,28 @@
+# Test-only dependencies, pinned to the versions CI already resolved. This
+# locks the current set; it does not move it.
+#
+# Why this file exists at all: these three used to be pinned inline on the
+# `pip install ...` command line in .github/workflows/ci.yml. Dependabot parses
+# manifests, not shell, so it could not see those pins and they were manual
+# maintenance. In a manifest, they are visible to the pip ecosystem configured
+# in .github/dependabot.yml and get bumped alongside everything else.
+#
+# Why this is deliberately NOT `-r requirements.txt`: requirements.txt is the
+# pinned *runtime* set -- what the app actually needs to run in production --
+# and CI installs it separately, on its own, precisely so that a Dependabot
+# bump of a runtime dependency is genuinely exercised. Pulling the runtime set
+# in from here would blur that line. Nothing below ships with the app.
+#
+#   pytest       -- the test runner.
+#   httpx        -- required by fastapi.testclient.TestClient, which
+#                   tests/test_watchlist_authz.py (and the other TestClient
+#                   suites) uses. The application itself speaks HTTP with
+#                   `requests` -- see tmdb.py and watchlist.py -- and never
+#                   imports httpx, which is why httpx belongs here and not in
+#                   requirements.txt.
+#   pytest-cov   -- coverage measurement for the Sonar report; likewise
+#                   test-only.
+
+pytest==9.1.1
+httpx==0.28.1
+pytest-cov==7.1.0

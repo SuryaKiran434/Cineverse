@@ -56,11 +56,15 @@ jobs:
       # and is deliberately not added to requirements.txt, which stays the pinned
       # runtime set that Dependabot manages.
       # pytest-cov is likewise test-only and stays out of requirements.txt.
-      # Pinned to the versions CI already resolved, so this locks the set rather
-      # than moving it. The cost: Dependabot reads manifests, not ad-hoc pip
-      # command lines, so these three are manual maintenance from here.
+      #
+      # The pins live in requirements-ci.txt rather than on this command line.
+      # Dependabot reads manifests, not ad-hoc pip command lines, so pinning
+      # them here made them invisible to it and left them as manual maintenance
+      # -- which is how a CI pin drifts away from what actually ships. In a
+      # manifest they are covered by the pip ecosystem in .github/dependabot.yml.
+      # The header of requirements-ci.txt carries the reasoning for each pin.
       - name: Install test dependencies
-        run: "pip install pytest==9.1.1 httpx==0.28.1 pytest-cov==7.1.0 --only-binary :all:"
+        run: "pip install -r requirements-ci.txt --only-binary :all:"
 
       # The app is a flat set of top-level modules rather than a package, so
       # each one is named explicitly — `--cov=.` would drag in tests/ and venv/.
