@@ -8,7 +8,7 @@
 fastapi==0.141.1
 uvicorn==0.52.4
 SQLAlchemy==2.0.38
-mysql-connector-python==9.2.0
+mysql-connector-python==9.7.0
 pydantic==2.13.4
 PyJWT==2.13.0
 passlib==1.7.4
