@@ -23,6 +23,6 @@
 #   pytest-cov   -- coverage measurement for the Sonar report; likewise
 #                   test-only.
 
-pytest==9.1.1
+pytest==9.2.0
 httpx==0.28.1
 pytest-cov==7.1.0
